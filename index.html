@@ -1,0 +1,1319 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Arbeitszeitkonto PWA</title>
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="theme-color" content="#1e293b">
+    
+    <link rel="manifest" href="./manifest.json">
+    <link rel="apple-touch-icon" href="./icon-192.png">
+
+    <!-- Bibliothek zur automatischen PDF-Generierung im Hintergrund -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+    <style>
+        :root {
+            --bg-main: #f8fafc;
+            --bg-card: #ffffff;
+            --primary: #1e293b;
+            --primary-light: #334155;
+            --accent-in: #10b981;
+            --accent-in-hover: #059669;
+            --accent-out: #ef4444;
+            --accent-out-hover: #dc2626;
+            --accent-pause: #f59e0b;
+            --accent-pause-hover: #d97706;
+            --accent-info: #3b82f6;
+            --teams-purple: #6366f1;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --border-color: #e2e8f0;
+            --radius-xl: 20px;
+            --radius-lg: 14px;
+            --radius-md: 10px;
+            --shadow-sm: 0 2px 4px rgba(0,0,0,0.02);
+            --shadow-md: 0 10px 25px -5px rgba(0,0,0,0.05), 0 8px 10px -6px rgba(0,0,0,0.05);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            line-height: 1.5;
+            padding: calc(20px + env(safe-area-inset-top)) 16px calc(30px + env(safe-area-inset-bottom)) 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 480px;
+        }
+
+        /* Header Bereich */
+        .header-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            padding: 4px 8px;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .header-titles h1 {
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: var(--primary);
+            letter-spacing: -0.5px;
+        }
+
+        .user-name-display {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            font-weight: 500;
+            margin-top: 2px;
+        }
+
+        /* PWA Install Button (immer sichtbar) */
+        .installbtn {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            border: 0;
+            border-radius: 999px;
+            background: #ffda19;
+            color: #06396f;
+            font: 800 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            padding: 8px 12px;
+            white-space: nowrap;
+            box-shadow: 0 2px 7px rgba(6, 57, 111, 0.2);
+            cursor: pointer;
+            transition: transform 0.15s ease;
+        }
+
+        .installbtn:active {
+            transform: scale(0.95);
+        }
+
+        /* Globale Card-Styles */
+        .card {
+            background: var(--bg-card);
+            padding: 20px;
+            border-radius: var(--radius-xl);
+            box-shadow: var(--shadow-md);
+            margin-bottom: 18px;
+            border: 1px solid rgba(226, 232, 240, 0.8);
+        }
+
+        .card h2 {
+            font-size: 1.125rem;
+            font-weight: 700;
+            margin-bottom: 14px;
+            color: var(--primary);
+        }
+
+        /* Live Status Dynamic Island */
+        .status-island {
+            background: var(--primary);
+            color: white;
+            padding: 16px;
+            border-radius: var(--radius-lg);
+            text-align: center;
+            font-weight: 600;
+            font-size: 1.05rem;
+            margin-bottom: 12px;
+            box-shadow: 0 4px 12px rgba(30, 41, 59, 0.25);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: all 0.3s ease;
+        }
+
+        /* Kompakte Tages-Zusammenfassung */
+        .today-summary-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-around;
+            background: #f1f5f9;
+            padding: 10px 14px;
+            border-radius: var(--radius-lg);
+            border: 1px solid #e2e8f0;
+            margin-bottom: 20px;
+            font-size: 0.875rem;
+        }
+
+        .today-summary-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .today-summary-lbl {
+            color: var(--text-muted);
+            font-size: 0.775rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .today-summary-val {
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .today-summary-divider {
+            color: var(--border-color);
+            font-weight: 300;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .stat-box {
+            background: #f1f5f9;
+            padding: 14px 10px;
+            border-radius: var(--radius-lg);
+            text-align: center;
+            border: 1px solid #e2e8f0;
+        }
+
+        .stat-val {
+            font-size: 1.35rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .stat-lbl {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            margin-top: 2px;
+        }
+
+        /* Formular-Elemente & Auswahlen */
+        .field-group {
+            margin-bottom: 16px;
+        }
+
+        .field-label {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--primary-light);
+            display: block;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        select, input, textarea {
+            width: 100%;
+            padding: 12px 14px;
+            font-size: 1rem;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-color);
+            background-color: #f8fafc;
+            color: var(--text-main);
+            font-family: inherit;
+            transition: border-color 0.2s, background-color 0.2s;
+            -webkit-appearance: none;
+        }
+
+        select {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 14px center;
+            background-size: 16px;
+            padding-right: 40px;
+            font-weight: 600;
+        }
+
+        select:focus, input:focus, textarea:focus {
+            outline: none;
+            border-color: var(--accent-info);
+            background-color: #ffffff;
+        }
+
+        textarea {
+            resize: none;
+            min-height: 70px;
+        }
+
+        /* Buttons Touch-optimiert */
+        button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            min-height: 48px;
+            font-size: 1rem;
+            font-weight: 700;
+            border: none;
+            border-radius: var(--radius-lg);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: var(--shadow-sm);
+        }
+
+        button:active {
+            transform: scale(0.98);
+            opacity: 0.9;
+        }
+
+        .btn-in { background-color: var(--accent-in); color: white; }
+        .btn-out { background-color: var(--accent-out); color: white; }
+        .btn-pause { background-color: var(--accent-pause); color: white; }
+        .btn-info { background-color: #f1f5f9; color: var(--primary); border: 1px solid var(--border-color); box-shadow: none; }
+        .btn-secondary { background-color: var(--primary); color: white; }
+        .btn-teams { background-color: var(--teams-purple); color: white; }
+        .btn-outline { background-color: transparent; border: 2px solid var(--border-color); color: var(--text-main); box-shadow: none;}
+        
+        .icon-btn {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow-sm);
+            font-size: 1.25rem;
+            padding: 0;
+            width: 44px;
+            height: 44px;
+            min-height: 44px;
+            border-radius: 50%;
+        }
+
+        .btn-action-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        /* Verlaufstabelle mit Scrollbar & Sticky-Header */
+        .table-container {
+            overflow-x: auto;
+            max-height: 320px;
+            overflow-y: auto;
+            margin: 0 -4px;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-color);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 12px 10px;
+            text-align: left;
+            font-size: 0.875rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th {
+            background-color: #f8fafc;
+            color: var(--text-muted);
+            font-weight: 700;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.5px;
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            box-shadow: 0 1px 0 var(--border-color);
+        }
+
+        td {
+            font-weight: 500;
+        }
+
+        /* Modals modernisiert als Bottom-Sheets auf Mobile */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 23, 42, 0.4);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            justify-content: center;
+            align-items: flex-end;
+            z-index: 100;
+            animation: fadeIn 0.2s ease-out;
+        }
+
+        .modal-content {
+            background: var(--bg-card);
+            padding: 24px 20px calc(24px + env(safe-area-inset-bottom)) 20px;
+            border-top-left-radius: var(--radius-xl);
+            border-top-right-radius: var(--radius-xl);
+            width: 100%;
+            max-width: 480px;
+            max-height: 88vh;
+            overflow-y: auto;
+            box-shadow: 0 -10px 25px rgba(0,0,0,0.1);
+            animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        fieldset {
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            margin-bottom: 16px;
+            padding: 14px;
+            background: #f8fafc;
+        }
+
+        legend {
+            font-size: 0.8rem;
+            font-weight: 800;
+            color: var(--accent-info);
+            padding: 0 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .toast {
+            position: fixed;
+            z-index: 4000;
+            left: 50%;
+            bottom: 30px;
+            transform: translateX(-50%);
+            max-width: 90vw;
+            padding: 10px 16px;
+            border-radius: 10px;
+            background: var(--primary);
+            color: #fff;
+            box-shadow: var(--shadow-md);
+            display: none;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-align: center;
+        }
+
+        .toast.show {
+            display: block;
+        }
+
+        #print-section { display: none; }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+        /* Tablet/Desktop Optimierung */
+        @media (min-width: 480px) {
+            body { padding: 40px 20px; }
+            .modal { align-items: center; }
+            .modal-content { border-radius: var(--radius-xl); max-height: 80vh; }
+        }
+
+        /* PDF RENDER MODUS FÜR MAKE/TEAMS VERSAND */
+        @media print, all {
+            .pdf-render-mode #print-section { 
+                display: block !important; 
+                width: 100%; 
+                font-size: 9pt; 
+                background: white; 
+                color: black;
+                font-family: Arial, sans-serif;
+                padding: 10px;
+            }
+            .pdf-render-mode .container, .pdf-render-mode .modal { display: none !important; }
+        }
+
+        /* DRUCKANSICHT */
+        @media print {
+            body { background: white; margin: 0; padding: 0; display: block; color: black; font-family: Arial, sans-serif; }
+            .container, .modal { display: none !important; }
+            #print-section { display: block !important; width: 100%; font-size: 9pt; }
+            .print-header { display: flex; justify-content: space-between; margin-bottom: 25px; font-size: 10pt; }
+            .print-header div { line-height: 1.4; }
+            .print-table { width: 100%; border-collapse: collapse; margin-bottom: 40px; }
+            .print-table th, .print-table td { border-bottom: 1px solid #ddd; padding: 6px 4px; text-align: left; vertical-align: top; }
+            .print-table th { font-weight: bold; border-bottom: 2px solid #000; }
+            .print-table td.notiz-col { white-space: pre-wrap; font-size: 8.5pt; max-width: 250px; }
+            .print-footer-row td { font-weight: bold; border-top: 2px solid #000; border-bottom: none; padding-top: 10px; }
+            .print-signatures { display: flex; justify-content: space-between; margin-top: 50px; page-break-inside: avoid; }
+            .signature-box { width: 45%; text-align: center; border-top: 1px solid #000; padding-top: 5px; font-size: 9pt; }
+            .page-number { text-align: center; font-size: 8pt; margin-top: 20px; page-break-inside: avoid; }
+            @page { margin: 1.5cm; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header-bar">
+        <div class="header-titles">
+            <h1 id="app-title">Arbeitszeitkonto</h1>
+            <div id="user-display-name" class="user-name-display">Bitte Namen in den Einstellungen eintragen</div>
+        </div>
+        <div class="header-actions">
+            <button class="installbtn" id="installApp" type="button">⬇ Installieren</button>
+            <button id="btn-settings-open" class="icon-btn" title="Einstellungen">⚙️</button>
+        </div>
+    </div>
+    
+    <div class="card" style="padding-bottom: 16px;">
+        <button id="btn-overview-open" class="btn-info" style="margin-bottom: 16px; min-height: 44px;">📊 Monats-Auswertung & Überstunden</button>
+
+        <div id="status" class="status-island">🕒 Geladen...</div>
+
+        <div class="today-summary-bar">
+            <div class="today-summary-item">
+                <span class="today-summary-lbl">Heute:</span>
+                <span id="stat-today-work" class="today-summary-val">0:00 h</span>
+            </div>
+            <div class="today-summary-divider">|</div>
+            <div class="today-summary-item">
+                <span class="today-summary-lbl">Pause:</span>
+                <span id="stat-today-pause" class="today-summary-val">0 Min</span>
+            </div>
+        </div>
+        
+        <div class="field-group">
+            <label for="stamp-type" class="field-label">Buchungsart</label>
+            <select id="stamp-type">
+                <option value="Arbeitszeit">💼 Arbeitszeit</option>
+                <option value="Urlaub">🌴 Urlaub</option>
+                <option value="Krank">🤒 Krank</option>
+                <option value="Feiertag">✨ Feiertag</option>
+                <option value="Ruhetag">💤 Ruhetag</option>
+            </select>
+        </div>
+        
+        <button id="btn-stamp" class="btn-in" style="margin-bottom: 10px;">Einstempeln / Start</button>
+        <button id="btn-pause" class="btn-pause" style="display: none;">Pause starten</button>
+    </div>
+
+    <div class="card" style="display: flex; flex-direction: column; gap: 8px;">
+        <div class="btn-action-group" style="margin-bottom: 0;">
+            <button id="btn-export-pdf" class="btn-secondary" style="margin-bottom:0;">📄 PDF-Bericht</button>
+            <button id="btn-email-share" class="btn-secondary" style="background-color:#14b8a6; margin-bottom:0;">✉️ Per E-Mail</button>
+        </div>
+        <button id="btn-send-teams" class="btn-teams" style="margin-bottom:0;">💬 An Teams senden</button>
+    </div>
+
+    <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+            <h2 style="margin-bottom: 0;">Historie</h2>
+            <select id="history-month-filter" style="width: auto; max-width: 170px; padding: 6px 10px; font-size: 0.85rem; height: 36px;">
+                <option value="" disabled selected>Monat wählen...</option>
+                <option value="all">Alle anzeigen</option>
+            </select>
+        </div>
+        <div class="table-container" id="history-table-container" style="display: none;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Datum</th>
+                        <th>Schichten / Art</th>
+                        <th>Netto</th>
+                    </tr>
+                </thead>
+                <tbody id="log-table"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div id="overview-modal" class="modal">
+    <div class="modal-content">
+        <h2 style="text-align:center; margin-bottom: 18px; font-size:1.3rem;">📊 Auswertung (Aktueller Monat)</h2>
+        
+        <div class="stats-grid">
+            <div class="stat-box" style="background:#f8fafc;">
+                <div id="ov-soll-month" class="stat-val" style="font-size:1.15rem;">0:00 h</div>
+                <div class="stat-lbl">Soll (Monat)</div>
+            </div>
+            <div class="stat-box" style="background:#f8fafc;">
+                <div id="ov-soll-today" class="stat-val" style="font-size:1.15rem;">0:00 h</div>
+                <div class="stat-lbl">Soll (Bis heute)</div>
+            </div>
+            <div class="stat-box" style="background:#ecfdf5;">
+                <div id="ov-ist" class="stat-val" style="color:var(--accent-in); font-size:1.15rem;">0:00 h</div>
+                <div class="stat-lbl">Ist (Inkl. Gutschr.)</div>
+            </div>
+            <div class="stat-box" style="background:#fef2f2;">
+                <div id="ov-diff" class="stat-val" style="color:var(--accent-out); font-size:1.15rem;">0:00 h</div>
+                <div class="stat-lbl">Lfd. Differenz</div>
+            </div>
+        </div>
+
+        <div class="stat-box" style="background:#fffbeb; margin-top:4px; padding:16px; text-align:center; border: 1px solid #fef3c7;">
+            <div class="stat-lbl" style="font-size:0.8rem; margin-bottom:4px;">Gesamt-Überstundenkonto</div>
+            <div id="ov-overtime" class="stat-val" style="font-size:1.75rem; color:#d97706;">0:00 h</div>
+            <div class="stat-lbl" style="text-transform:none; font-weight:500;">(Startwert + Laufende Differenzen)</div>
+        </div>
+        
+        <button id="btn-overview-close" class="btn-secondary" style="margin-top:20px;">Schließen</button>
+    </div>
+</div>
+
+<div id="edit-modal" class="modal">
+    <div class="modal-content">
+        <h2 style="margin-bottom: 16px;">📝 Eintrag prüfen & speichern</h2>
+        
+        <div class="field-group">
+            <label for="edit-shift-name" class="field-label">Bezeichnung (Schicht / Art)</label>
+            <input type="text" id="edit-shift-name">
+        </div>
+        <div class="field-group">
+            <label for="edit-start-time" class="field-label">Von</label>
+            <input type="datetime-local" id="edit-start-time">
+        </div>
+        <div class="field-group" id="group-end-time">
+            <label for="edit-end-time" class="field-label">Bis</label>
+            <input type="datetime-local" id="edit-end-time">
+        </div>
+        <div class="field-group" id="group-pause">
+            <label for="edit-pause-minutes" class="field-label">Pause (in Minuten)</label>
+            <input type="number" id="edit-pause-minutes" min="0" value="0">
+        </div>
+        <div class="field-group">
+            <label for="edit-note" class="field-label">Notiz / Bemerkung</label>
+            <textarea id="edit-note" placeholder="Optionale Anmerkungen..."></textarea>
+        </div>
+        
+        <button id="btn-edit-save" class="btn-in" style="margin-bottom: 10px;">Speichern</button>
+        <button id="btn-edit-cancel" class="btn-outline">Abbrechen</button>
+    </div>
+</div>
+
+<div id="settings-modal" class="modal">
+    <div class="modal-content">
+        <h2 style="margin-bottom: 16px;">⚙️ Einstellungen</h2>
+        
+        <fieldset>
+            <legend>Arbeitgeber Stammdaten</legend>
+            <div class="field-group">
+                <label for="set-company-name" class="field-label">Firmenname</label>
+                <input type="text" id="set-company-name" placeholder="z.B. Taxi Pfeiffer">
+            </div>
+            <div class="field-group">
+                <label for="set-company-address" class="field-label">Adresse Firma</label>
+                <input type="text" id="set-company-address" placeholder="Straße, PLZ Ort">
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>Arbeitnehmer Stammdaten</legend>
+            <div class="field-group">
+                <label for="set-user-name" class="field-label">Dein Name</label>
+                <input type="text" id="set-user-name" placeholder="Vorname Nachname">
+            </div>
+            <div class="field-group">
+                <label for="set-user-address" class="field-label">Deine Adresse</label>
+                <input type="text" id="set-user-address" placeholder="Musterstraße 1, 12345 Ort">
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>Berechnungs-Parameter</legend>
+            <div class="field-group">
+                <label for="set-shift-names" class="field-label">Standard-Schichten (Komma-getrennt)</label>
+                <input type="text" id="set-shift-names">
+            </div>
+            <div class="field-group">
+                <label for="set-weekly-hours" class="field-label">Wochenstunden</label>
+                <input type="number" id="set-weekly-hours" step="0.5">
+            </div>
+            <div class="field-group">
+                <label for="set-workdays" class="field-label">Arbeitstage / Woche</label>
+                <select id="set-workdays">
+                    <option value="5">5-Tage-Woche (Mo-Fr)</option>
+                    <option value="6">6-Tage-Woche (Mo-Sa)</option>
+                    <option value="7">7-Tage-Woche (Mo-So)</option>
+                </select>
+            </div>
+            <div class="field-group">
+                <label for="set-initial-overtime" class="field-label">Überstunden Startwert</label>
+                <input type="number" id="set-initial-overtime" step="0.1">
+            </div>
+        </fieldset>
+
+        <button id="btn-settings-save" class="btn-in" style="margin-bottom: 12px;">Einstellungen Speichern</button>
+        <button id="btn-clear" style="background:#fef2f2; color:var(--accent-out); border: 1px dashed var(--accent-out); box-shadow: none;">Sämtliche Daten löschen</button>
+    </div>
+</div>
+
+<div id="print-section"></div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+    const $ = id => document.getElementById(id);
+    function toast(t) {
+        $('toast').textContent = t;
+        $('toast').classList.add('show');
+        setTimeout(() => $('toast').classList.remove('show'), 3200);
+    }
+
+    // PWA Installation Handlers
+    let installPrompt = null;
+    const installButton = $('installApp');
+
+    window.addEventListener('beforeinstallprompt', event => {
+        event.preventDefault();
+        installPrompt = event;
+    });
+
+    window.addEventListener('appinstalled', () => {
+        installPrompt = null;
+        if (installButton) {
+            installButton.textContent = '✓ Installiert';
+            installButton.disabled = true;
+        }
+    });
+
+    if (installButton) {
+        const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+        const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+        
+        if (isIOS && !isStandalone) {
+            installButton.textContent = '＋ Zum Startbildschirm';
+        }
+
+        installButton.addEventListener('click', async () => {
+            if (installPrompt) {
+                installPrompt.prompt();
+                const choice = await installPrompt.userChoice;
+                installPrompt = null;
+                if (choice && choice.outcome === 'accepted') {
+                    installButton.textContent = '✓ Installiert';
+                }
+                return;
+            }
+            if (isIOS) {
+                toast('Zum Installieren: Safari öffnen, Teilen antippen und „Zum Home-Bildschirm“ wählen.');
+                return;
+            }
+            if (location.protocol === 'file:') {
+                toast('Hinweis: Lokale Dateien (file://) können nicht direkt installiert werden. Nutze bitte das Browser-Menü (3 Punkte) -> „Zum Startbildschirm hinzufügen“ oder „App installieren“.');
+                return;
+            }
+            toast('Nutze das Installationssymbol in der Browser-Leiste oder das Menü (3 Punkte) -> „App installieren“.');
+        });
+    }
+
+    // Service Worker Registrierung
+    if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+        window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(err => console.warn('Service Worker Fehler:', err)));
+    }
+
+    // Konfiguration & State (Version 7)
+    let config = JSON.parse(localStorage.getItem('az_config7')) || {
+        userName: '', userAddress: '',
+        companyName: '', companyAddress: '',
+        teamsWebhookUrl: 'https://hook.eu1.make.com/dx0cnxgyqwua9ljiejerft4pq8joi38j',
+        shiftNames: 'TP 60, TP 444, TP 556',
+        weeklyHours: 40,
+        workDaysPerWeek: 5,
+        initialOvertime: 0
+    };
+
+    let rawTicks = JSON.parse(localStorage.getItem('az_ticks7')) || [];
+    let currentShift = JSON.parse(localStorage.getItem('az_current7')) || null;
+
+    const statusEl = document.getElementById('status');
+    const stampBtn = document.getElementById('btn-stamp');
+    const pauseBtn = document.getElementById('btn-pause');
+    const stampTypeSelect = document.getElementById('stamp-type');
+    const tableBody = document.getElementById('log-table');
+    const historyFilterSelect = document.getElementById('history-month-filter');
+    const historyTableContainer = document.getElementById('history-table-container');
+    
+    const settingsModal = document.getElementById('settings-modal');
+    const editModal = document.getElementById('edit-modal');
+    const overviewModal = document.getElementById('overview-modal');
+
+    function toLocalISOString(date) {
+        const tzo = -date.getTimezoneOffset(), dif = tzo >= 0 ? '+' : '-', pad = function(num) { return (num < 10 ? '0' : '') + num; };
+        return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate()) + 'T' + pad(date.getHours()) + ':' + pad(date.getMinutes());
+    }
+
+    function msToHours(ms) { return ms / 3600000; }
+    function formatHours(hours) {
+        const sign = hours < 0 ? '-' : '';
+        const h = Math.floor(Math.abs(hours));
+        const m = Math.round((Math.abs(hours) - h) * 60);
+        return `${sign}${h}:${m.toString().padStart(2, '0')} h`;
+    }
+    
+    function formatTimeHHMM(ms) {
+        if(ms <= 0) return "0:00";
+        let totalMinutes = Math.round(ms / 60000);
+        let h = Math.floor(totalMinutes / 60);
+        let m = totalMinutes % 60;
+        return `${h}:${m.toString().padStart(2, '0')}`;
+    }
+
+    function getShiftPresets() { return config.shiftNames.split(',').map(s => s.trim()).filter(s => s.length > 0); }
+    function getDailyTarget() { return (parseFloat(config.weeklyHours) || 40) / (parseInt(config.workDaysPerWeek) || 5); }
+
+    function calculateMonthlyOverview() {
+        let now = new Date();
+        let y = now.getFullYear();
+        let m = now.getMonth();
+        let daysInMonth = new Date(y, m + 1, 0).getDate();
+        let currentDay = now.getDate();
+        
+        let dailySoll = getDailyTarget();
+        let totalSollMonth = 0;
+        let totalSollToday = 0;
+        let totalIst = 0;
+
+        for(let d = 1; d <= daysInMonth; d++) {
+            let curDate = new Date(y, m, d);
+            let dayOfWeek = curDate.getDay();
+            let isWorkDay = false;
+            if (config.workDaysPerWeek == 5 && dayOfWeek >= 1 && dayOfWeek <= 5) isWorkDay = true;
+            if (config.workDaysPerWeek == 6 && dayOfWeek >= 1 && dayOfWeek <= 6) isWorkDay = true;
+            if (config.workDaysPerWeek == 7) isWorkDay = true;
+            
+            if (isWorkDay) {
+                totalSollMonth += dailySoll;
+                if (d <= currentDay) totalSollToday += dailySoll;
+            }
+        }
+
+        let monthPrefix = `${y}-${String(m+1).padStart(2,'0')}`;
+        let monthTicks = rawTicks.filter(t => t.start.startsWith(monthPrefix));
+        let creditedDays = new Set();
+        
+        monthTicks.forEach(t => {
+            let dateStr = t.start.split('T')[0];
+            if (t.type === 'Arbeitszeit' || t.type === 'Arbeit') { 
+                let start = new Date(t.start);
+                let end = t.end ? new Date(t.end) : new Date(); 
+                let pauseMs = (parseFloat(t.pauseMinutes) || 0) * 60000;
+                let net = msToHours((end - start) - pauseMs);
+                if (net > 0) totalIst += net;
+            } else if (['Urlaub', 'Krank', 'Feiertag'].includes(t.type)) {
+                if (!creditedDays.has(dateStr)) {
+                    totalIst += dailySoll;
+                    creditedDays.add(dateStr);
+                }
+            }
+        });
+
+        if (currentShift && (currentShift.type === 'Arbeitszeit' || currentShift.type === 'Arbeit')) {
+            let start = new Date(currentShift.start);
+            let end = new Date();
+            let currentPauseMs = parseFloat(currentShift.accumulatedPauseMs) || 0;
+            if (currentShift.pauseStart) currentPauseMs += (end - new Date(currentShift.pauseStart));
+            let net = msToHours((end - start) - currentPauseMs);
+            if (net > 0) totalIst += net;
+        } else if (currentShift && ['Urlaub', 'Krank', 'Feiertag'].includes(currentShift.type)) {
+             let dateStr = currentShift.start.split('T')[0];
+             if (!creditedDays.has(dateStr)) {
+                 totalIst += dailySoll;
+                 creditedDays.add(dateStr);
+             }
+        }
+
+        let diff = totalIst - totalSollToday;
+        let totalOvertime = (parseFloat(config.initialOvertime) || 0) + diff;
+
+        return { totalSollMonth, totalSollToday, totalIst, diff, totalOvertime };
+    }
+
+    function getTodayLiveStats() {
+        const todayStr = new Date().toISOString().split('T')[0];
+        let liveWorkHours = 0;
+        let livePauseMin = 0;
+        
+        let todayTicks = rawTicks.filter(t => t.start.split('T')[0] === todayStr && (t.type === 'Arbeitszeit' || t.type === 'Arbeit'));
+        todayTicks.forEach(t => {
+            let p = parseFloat(t.pauseMinutes) || 0;
+            livePauseMin += p;
+            liveWorkHours += msToHours(new Date(t.end) - new Date(t.start)) - (p / 60);
+        });
+
+        if (currentShift && (currentShift.type === 'Arbeitszeit' || currentShift.type === 'Arbeit')) {
+            let start = new Date(currentShift.start);
+            let end = new Date();
+            let currentPauseMs = parseFloat(currentShift.accumulatedPauseMs) || 0;
+            if (currentShift.pauseStart) currentPauseMs += (end - new Date(currentShift.pauseStart));
+            livePauseMin += (currentPauseMs / 60000);
+            let net = msToHours(end - start) - (currentPauseMs / 3600000);
+            liveWorkHours += (net > 0 ? net : 0);
+        }
+        return { liveWorkHours, livePauseMin };
+    }
+
+    function updateMonthFilterOptions() {
+        if (!historyFilterSelect) return;
+        const currentSelected = historyFilterSelect.value;
+        
+        const monthNames = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
+        const monthsSet = new Set();
+        
+        rawTicks.forEach(t => {
+            if (t.start) {
+                monthsSet.add(t.start.substring(0, 7)); // Format: YYYY-MM
+            }
+        });
+
+        const sortedMonths = Array.from(monthsSet).sort().reverse();
+        
+        let optionsHtml = '<option value="" disabled selected>Monat wählen...</option><option value="all">Alle anzeigen</option>';
+        sortedMonths.forEach(ym => {
+            const [y, m] = ym.split('-');
+            const monthName = monthNames[parseInt(m, 10) - 1] || m;
+            optionsHtml += `<option value="${ym}">${monthName} ${y}</option>`;
+        });
+
+        historyFilterSelect.innerHTML = optionsHtml;
+        if (sortedMonths.includes(currentSelected) || currentSelected === 'all') {
+            historyFilterSelect.value = currentSelected;
+        } else if (currentSelected) {
+            historyFilterSelect.value = currentSelected;
+        } else {
+            historyFilterSelect.value = "";
+        }
+    }
+
+    function updateUI() {
+        document.getElementById('app-title').textContent = config.companyName || "Arbeitszeitkonto";
+        document.getElementById('user-display-name').textContent = config.userName || 'Bitte Namen in den Einstellungen eintragen';
+        
+        const stats = getTodayLiveStats();
+        document.getElementById('stat-today-work').textContent = formatHours(stats.liveWorkHours);
+        document.getElementById('stat-today-pause').textContent = `${Math.round(stats.livePauseMin)} Min`;
+
+        if (currentShift) {
+            let t = new Date(currentShift.start).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            if (currentShift.pauseStart) {
+                statusEl.textContent = `⏸️ In Pause seit ${new Date(currentShift.pauseStart).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+                statusEl.style.backgroundColor = 'var(--accent-pause)';
+                pauseBtn.textContent = 'Pause beenden';
+            } else {
+                statusEl.textContent = `⚡ ${currentShift.name} läuft seit ${t}`;
+                statusEl.style.backgroundColor = 'var(--accent-in)';
+                pauseBtn.textContent = 'Pause starten';
+            }
+            stampBtn.textContent = 'Ausstempeln / Beenden';
+            stampBtn.className = 'btn-out';
+            stampTypeSelect.disabled = true;
+            pauseBtn.style.display = (currentShift.type === 'Arbeitszeit') ? 'block' : 'none';
+        } else {
+            statusEl.textContent = '🛑 Aktuell ausgestempelt';
+            statusEl.style.backgroundColor = 'var(--primary)';
+            stampBtn.textContent = 'Einstempeln / Start';
+            stampBtn.className = 'btn-in';
+            stampTypeSelect.disabled = false;
+            pauseBtn.style.display = 'none';
+        }
+
+        // Monats-Filter-Optionen aktualisieren
+        updateMonthFilterOptions();
+
+        // Tabelle nur anzeigen, wenn ein Monat / Filter gewählt wurde
+        const filterVal = historyFilterSelect ? historyFilterSelect.value : '';
+        
+        if (!filterVal || filterVal === '') {
+            if (historyTableContainer) historyTableContainer.style.display = 'none';
+        } else {
+            if (historyTableContainer) historyTableContainer.style.display = 'block';
+            tableBody.innerHTML = '';
+            let filteredTicks = [...rawTicks].reverse();
+            
+            if (filterVal !== 'all') {
+                filteredTicks = filteredTicks.filter(t => t.start.startsWith(filterVal));
+            }
+
+            if (filteredTicks.length === 0) {
+                const row = document.createElement('tr');
+                row.innerHTML = `<td colspan="3" style="text-align:center; color: var(--text-muted); padding: 16px;">Keine Einträge für diesen Zeitraum</td>`;
+                tableBody.appendChild(row);
+            } else {
+                filteredTicks.forEach(tick => {
+                    const row = document.createElement('tr');
+                    const dObj = new Date(tick.start);
+                    const dateStr = dObj.toLocaleDateString([], {day: '2-digit', month: '2-digit'});
+                    if(tick.type === 'Arbeitszeit') {
+                        let netMs = (new Date(tick.end) - dObj) - ((parseFloat(tick.pauseMinutes)||0) * 60000);
+                        row.innerHTML = `<td>${dateStr}</td><td>${tick.name}</td><td>${formatHours(msToHours(netMs))}</td>`;
+                    } else {
+                        row.innerHTML = `<td>${dateStr}</td><td>${tick.type}</td><td>-</td>`;
+                    }
+                    tableBody.appendChild(row);
+                });
+            }
+        }
+    }
+
+    if (historyFilterSelect) {
+        historyFilterSelect.addEventListener('change', () => { updateUI(); });
+    }
+
+    setInterval(() => { if (currentShift) updateUI(); }, 60000);
+
+    // Modals Handling
+    document.getElementById('btn-overview-open').addEventListener('click', () => {
+        let ov = calculateMonthlyOverview();
+        document.getElementById('ov-soll-month').textContent = formatHours(ov.totalSollMonth);
+        document.getElementById('ov-soll-today').textContent = formatHours(ov.totalSollToday);
+        document.getElementById('ov-ist').textContent = formatHours(ov.totalIst);
+        
+        let diffEl = document.getElementById('ov-diff');
+        diffEl.textContent = formatHours(ov.diff);
+        diffEl.style.color = ov.diff >= 0 ? 'var(--accent-in)' : 'var(--accent-out)';
+
+        let overEl = document.getElementById('ov-overtime');
+        overEl.textContent = formatHours(ov.totalOvertime);
+        overEl.style.color = ov.totalOvertime >= 0 ? 'var(--accent-in)' : 'var(--accent-out)';
+
+        overviewModal.style.display = 'flex';
+    });
+    document.getElementById('btn-overview-close').addEventListener('click', () => { overviewModal.style.display = 'none'; });
+
+    pauseBtn.addEventListener('click', () => {
+        if (!currentShift) return;
+        const now = new Date().toISOString();
+        if (!currentShift.pauseStart) { 
+            currentShift.pauseStart = now; 
+        } else {
+            currentShift.accumulatedPauseMs = (parseFloat(currentShift.accumulatedPauseMs) || 0) + (new Date(now) - new Date(currentShift.pauseStart));
+            currentShift.pauseStart = null;
+        }
+        localStorage.setItem('az_current7', JSON.stringify(currentShift));
+        updateUI();
+    });
+
+    stampBtn.addEventListener('click', () => {
+        const now = new Date();
+        const selectedType = stampTypeSelect.value;
+        const todayStr = now.toISOString().split('T')[0];
+
+        if (!currentShift) {
+            let presets = getShiftPresets();
+            let chosenName = presets.length > 0 ? presets[0] : 'Schicht 1';
+            
+            if (selectedType === 'Arbeitszeit') {
+                let alreadyStamped = rawTicks.some(tick => tick.start.split('T')[0] === todayStr && tick.type === 'Arbeitszeit');
+                if (alreadyStamped) {
+                    let userInput = prompt(`Neue Schicht am selben Tag.\nVorgaben: ${presets.join(', ')}\nName:`, presets[1] || chosenName);
+                    if (userInput === null) return; 
+                    chosenName = userInput.trim() || chosenName;
+                }
+            } else {
+                chosenName = selectedType;
+            }
+
+            currentShift = { start: now.toISOString(), end: null, type: selectedType, name: chosenName, accumulatedPauseMs: 0, pauseStart: null, note: '' };
+            
+            if(selectedType !== 'Arbeitszeit') {
+                openEditModal(now, false);
+            } else {
+                localStorage.setItem('az_current7', JSON.stringify(currentShift));
+                updateUI();
+            }
+        } else {
+            if (currentShift.pauseStart) {
+                currentShift.accumulatedPauseMs = (parseFloat(currentShift.accumulatedPauseMs) || 0) + (now - new Date(currentShift.pauseStart));
+                currentShift.pauseStart = null;
+            }
+            openEditModal(now, currentShift.type === 'Arbeitszeit');
+        }
+    });
+
+    function openEditModal(now, isWork) {
+        document.getElementById('edit-shift-name').value = currentShift.name;
+        document.getElementById('edit-start-time').value = toLocalISOString(new Date(currentShift.start));
+        
+        if(isWork) {
+            document.getElementById('group-end-time').style.display = 'block';
+            document.getElementById('group-pause').style.display = 'block';
+            document.getElementById('edit-end-time').value = toLocalISOString(now);
+            document.getElementById('edit-pause-minutes').value = Math.round((parseFloat(currentShift.accumulatedPauseMs) || 0) / 60000);
+        } else {
+            document.getElementById('group-end-time').style.display = 'none';
+            document.getElementById('group-pause').style.display = 'none';
+        }
+        document.getElementById('edit-note').value = currentShift.note || '';
+        editModal.style.display = 'flex';
+    }
+
+    document.getElementById('btn-edit-save').addEventListener('click', () => {
+        if (!currentShift) return;
+        currentShift.name = document.getElementById('edit-shift-name').value || currentShift.type;
+        currentShift.start = new Date(document.getElementById('edit-start-time').value).toISOString();
+        
+        if(currentShift.type === 'Arbeitszeit') {
+            currentShift.end = new Date(document.getElementById('edit-end-time').value).toISOString();
+            currentShift.pauseMinutes = parseFloat(document.getElementById('edit-pause-minutes').value) || 0;
+        } else {
+            currentShift.end = currentShift.start; 
+            currentShift.pauseMinutes = 0;
+        }
+        currentShift.note = document.getElementById('edit-note').value.trim();
+
+        rawTicks.push(currentShift);
+        localStorage.setItem('az_ticks7', JSON.stringify(rawTicks));
+        currentShift = null;
+        localStorage.removeItem('az_current7');
+        editModal.style.display = 'none';
+        updateUI();
+    });
+
+    document.getElementById('btn-edit-cancel').addEventListener('click', () => { editModal.style.display = 'none'; });
+
+    // Einstellungen
+    document.getElementById('btn-settings-open').addEventListener('click', () => {
+        document.getElementById('set-company-name').value = config.companyName || '';
+        document.getElementById('set-company-address').value = config.companyAddress || '';
+        document.getElementById('set-user-name').value = config.userName || '';
+        document.getElementById('set-user-address').value = config.userAddress || '';
+        document.getElementById('set-shift-names').value = config.shiftNames || '';
+        document.getElementById('set-weekly-hours').value = config.weeklyHours;
+        document.getElementById('set-workdays').value = config.workDaysPerWeek;
+        document.getElementById('set-initial-overtime').value = config.initialOvertime;
+        settingsModal.style.display = 'flex';
+    });
+
+    document.getElementById('btn-settings-save').addEventListener('click', () => {
+        config.companyName = document.getElementById('set-company-name').value;
+        config.companyAddress = document.getElementById('set-company-address').value;
+        config.userName = document.getElementById('set-user-name').value;
+        config.userAddress = document.getElementById('set-user-address').value;
+        config.shiftNames = document.getElementById('set-shift-names').value;
+        config.weeklyHours = parseFloat(document.getElementById('set-weekly-hours').value) || 40;
+        config.workDaysPerWeek = parseInt(document.getElementById('set-workdays').value) || 5;
+        config.initialOvertime = parseFloat(document.getElementById('set-initial-overtime').value) || 0;
+        localStorage.setItem('az_config7', JSON.stringify(config));
+        settingsModal.style.display = 'none';
+        updateUI();
+    });
+
+    // BERICHTS-HTML GENERIEREN
+    function buildReportHTML(pMonth, pYear) {
+        let firstDay = new Date(pYear, pMonth, 1);
+        let lastDay = new Date(pYear, pMonth + 1, 0);
+        const monthNames = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
+        
+        let html = `
+            <div class="print-header">
+                <div>
+                    <div><strong>${config.companyName || 'Firma'}</strong></div>
+                    <div>${config.companyAddress || 'Adresse'}</div>
+                </div>
+                <div style="text-align: right;">
+                    <div><strong>${monthNames[pMonth]} ${pYear}</strong></div>
+                    <div>01.${String(pMonth+1).padStart(2,'0')}.${pYear} - ${lastDay.getDate()}.${String(pMonth+1).padStart(2,'0')}.${pYear}</div>
+                </div>
+            </div>
+            
+            <div class="print-header" style="margin-bottom: 20px;">
+                <div>
+                    <div><strong>${config.userName || 'Vorname Nachname'}</strong></div>
+                    <div>${config.userAddress || 'Wohnort'}</div>
+                </div>
+            </div>
+
+            <table class="print-table">
+                <thead>
+                    <tr>
+                        <th style="width:12%;">Datum</th>
+                        <th style="width:18%;">Schicht</th>
+                        <th style="width:8%;">Von</th>
+                        <th style="width:8%;">Bis</th>
+                        <th style="width:8%;">Brutto</th>
+                        <th style="width:8%;">Pause</th>
+                        <th style="width:8%;">Netto</th>
+                        <th style="width:30%;">Notiz</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+        
+        let sumBruttoMs = 0, sumPauseMs = 0, sumNettoMs = 0;
+        const weekdays = ['So.', 'Mo.', 'Di.', 'Mi.', 'Do.', 'Fr.', 'Sa.'];
+
+        for (let d = 1; d <= lastDay.getDate(); d++) {
+            let curDate = new Date(pYear, pMonth, d);
+            let dateStr = toLocalISOString(curDate).split('T')[0];
+            let displayDate = `${weekdays[curDate.getDay()]} ${d}.${pMonth+1}.${pYear}`;
+            let dayTicks = rawTicks.filter(t => t.start.split('T')[0] === dateStr);
+            
+            if (dayTicks.length === 0) {
+                html += `<tr><td>${displayDate}</td><td>Ruhetag</td><td></td><td></td><td>0:00</td><td>0:00</td><td>0:00</td><td></td></tr>`;
+            } else {
+                dayTicks.forEach((tick, idx) => {
+                    let dDate = idx === 0 ? displayDate : '';
+                    if (tick.type !== 'Arbeitszeit') {
+                        let tName = tick.type === 'Urlaub' ? 'Ferien/Urlaub' : tick.type;
+                        html += `<tr><td>${dDate}</td><td>${tName}</td><td></td><td></td><td>0:00</td><td>0:00</td><td>0:00</td><td class="notiz-col">${tick.note || ''}</td></tr>`;
+                    } else {
+                        let sTime = new Date(tick.start);
+                        let eTime = new Date(tick.end);
+                        let bMs = eTime - sTime;
+                        let pMs = (parseFloat(tick.pauseMinutes) || 0) * 60000;
+                        let nMs = Math.max(0, bMs - pMs);
+                        
+                        sumBruttoMs += bMs; sumPauseMs += pMs; sumNettoMs += nMs;
+                        
+                        html += `<tr>
+                            <td>${dDate}</td>
+                            <td>${tick.name}</td>
+                            <td>${sTime.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</td>
+                            <td>${eTime.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</td>
+                            <td>${formatTimeHHMM(bMs)}</td>
+                            <td>${formatTimeHHMM(pMs)}</td>
+                            <td>${formatTimeHHMM(nMs)}</td>
+                            <td class="notiz-col">${tick.note || ''}</td>
+                        </tr>`;
+                    }
+                });
+            }
+        }
+
+        html += `
+                </tbody>
+                <tfoot>
+                    <tr class="print-footer-row">
+                        <td colspan="4" style="text-align: right; padding-right:15px;">Gesamt</td>
+                        <td>${formatTimeHHMM(sumBruttoMs)}</td>
+                        <td>${formatTimeHHMM(sumPauseMs)}</td>
+                        <td>${formatTimeHHMM(sumNettoMs)}</td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+
+            <div class="print-signatures">
+                <div class="signature-box">Datum und Unterschrift Arbeitgeber</div>
+                <div class="signature-box">Datum und Unterschrift Arbeitnehmer</div>
+            </div>
+        `;
+        return html;
+    }
+
+    // PDF / Drucken
+    document.getElementById('btn-export-pdf').addEventListener('click', () => {
+        let now = new Date();
+        let defaultMonth = `${String(now.getMonth() + 1).padStart(2,'0')}.${now.getFullYear()}`;
+        let input = prompt("Für welchen Monat möchtest du den Bericht drucken? (MM.YYYY)", defaultMonth);
+        if(!input) return;
+        
+        let parts = input.split('.');
+        if(parts.length !== 2) return alert("Falsches Format.");
+        let pMonth = parseInt(parts[0]) - 1;
+        let pYear = parseInt(parts[1]);
+        
+        document.getElementById('print-section').innerHTML = buildReportHTML(pMonth, pYear);
+        window.print();
+    });
+
+    // TEAMS SENDEN (MAKE WEBHOOK)
+    document.getElementById('btn-send-teams').addEventListener('click', async () => {
+        let now = new Date();
+        let defaultMonth = `${String(now.getMonth() + 1).padStart(2,'0')}.${now.getFullYear()}`;
+        let input = prompt("Für welchen Monat möchtest du den Bericht an Teams senden? (MM.YYYY)", defaultMonth);
+        if(!input) return;
+        
+        let parts = input.split('.');
+        if(parts.length !== 2) return alert("Falsches Format.");
+        let pMonth = parseInt(parts[0]) - 1;
+        let pYear = parseInt(parts[1]);
+
+        const monthNames = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
+        let monthLabel = `${monthNames[pMonth]} ${pYear}`;
+        let cleanFileName = `Arbeitszeit_${(config.userName || 'Mitarbeiter').replace(/\s+/g, '_')}_${pYear}_${String(pMonth+1).padStart(2,'0')}.pdf`;
+
+        const printContainer = document.getElementById('print-section');
+        printContainer.innerHTML = buildReportHTML(pMonth, pYear);
+        
+        document.body.classList.add('pdf-render-mode');
+        const sendBtn = document.getElementById('btn-send-teams');
+        sendBtn.disabled = true;
+        sendBtn.textContent = "⌛ PDF wird generiert...";
+
+        try {
+            const opt = {
+                margin:       10,
+                filename:     cleanFileName,
+                image:        { type: 'jpeg', quality: 0.98 },
+                html2canvas:  { scale: 2 },
+                jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+            };
+
+            const pdfBase64DataUri = await html2pdf().set(opt).from(printContainer).outputPdf('datauristring');
+            const base64Content = pdfBase64DataUri.split(',')[1];
+
+            sendBtn.textContent = "⌛ Wird an Teams gesendet...";
+
+            const response = await fetch(config.teamsWebhookUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    filename: cleanFileName,
+                    filebytes: base64Content,
+                    userName: config.userName || 'Mitarbeiter',
+                    month: monthLabel
+                })
+            });
+
+            if (response.ok) {
+                alert(`✅ Monatsbericht für ${monthLabel} wurde erfolgreich über Make an Teams gesendet!`);
+            } else {
+                alert(`⚠️ Fehler beim Senden an Make/Teams (Status: ${response.status})`);
+            }
+
+        } catch (err) {
+            console.error(err);
+            alert("❌ Fehler bei der PDF-Erstellung oder beim Versand.");
+        } finally {
+            document.body.classList.remove('pdf-render-mode');
+            sendBtn.disabled = false;
+            sendBtn.textContent = "💬 An Teams senden";
+        }
+    });
+
+    // E-Mail Export
+    document.getElementById('btn-email-share').addEventListener('click', () => {
+        let ov = calculateMonthlyOverview();
+        let subject = encodeURIComponent("Arbeitszeitkonto Auswertung");
+        let body = encodeURIComponent(`Hallo,\n\nhier ist meine aktuelle Monats-Auswertung:\n\n- Geleistete IST-Zeit: ${formatHours(ov.totalIst)}\n- Laufende Differenz diesen Monat: ${formatHours(ov.diff)}\n- Stand Überstundenkonto Gesamt: ${formatHours(ov.totalOvertime)}\n\nGeneriert per Arbeitszeit-PWA.`);
+        window.location.href = `mailto:?subject=${subject}&body=${body}`;
+    });
+
+    document.getElementById('btn-clear').addEventListener('click', () => {
+        if(confirm('Möchtest du wirklich alle Buchungen und Einstellungen unwiderruflich löschen?')) {
+            localStorage.clear(); location.reload();
+        }
+    });
+
+    window.addEventListener('click', (e) => { 
+        if (e.target === settingsModal) settingsModal.style.display = 'none'; 
+        if (e.target === editModal) editModal.style.display = 'none'; 
+        if (e.target === overviewModal) overviewModal.style.display = 'none'; 
+    });
+
+    updateUI();
+</script>
+</body>
+</html>
